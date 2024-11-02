@@ -85,7 +85,7 @@ async function getMainContent() {
     let node;
     
     while (node = walker.nextNode()) {
-        const text = node.textContent.trim();
+        const text = node.textContent;
         if (text.length > 0) {
             textNodes.push({
                 node: node,
@@ -120,15 +120,15 @@ async function callOpenAI(text) {
                 messages: [
                     {
                         "role": "system",
-                        "content": `Transform the provided content into a humorous, Star Wars-themed science fiction version, but respect the original content's integrity. 
+                        "content": `Craft the provided content into a humorous, Star Wars-themed science fiction version, but don't distort the original content/people names. 
 
 # Instructions
-1. **Add Star Wars Elements:** Modify relevant sections and humorously introduce Star Wars elements such as character names (e.g., Luke Skywalker), memorable phrases (e.g., "Do or do not, there is no try"), and references to popular elements like planets, starships, or characters. 
-2. **Add Humor, Keep Original Structure, and Names:** Insert light-hearted Star Wars-inspired jokes while maintaining the overall intent. Do NOT change individual personal names, and keep the original segment structure intact. Please do NOT insert new segments, or split existing segments.
-3. **Maintain Spacing:** Keep the original spacing at the start and end of each segment.
+1. **Add Star Wars Elements:** Modify relevant sections and humorously introduce Star Wars elements such as memorable phrases and references to popular elements like planets, starships, or references to characters. 
+2. **Add Humor, Keep Original Structure, and Names:** Insert light-hearted Star Wars-inspired jokes while maintaining the overall intent. Keep person names, and keep the original segment structure intact.
+3. **Maintain Spacing:** KEEP the original spaces at the start and end of each segment.
 
 # Output Format
-Return the transformed text with the same partitioning structure using '---SPLIT---'.`
+Return the transformed text with the same partitioning structure using '---SPLIT---'. Please do NOT insert new segments, or split existing segments. NO extra commentary, just the text.`
                     },
                     {
                         "role": "user",
@@ -153,13 +153,96 @@ Return the transformed text with the same partitioning structure using '---SPLIT
     }
 }
 
-async function replaceTextContent(textNodes, funnyText) {
-    const funnyParts = funnyText.split('---SPLIT---');
-    textNodes.forEach((textNode, index) => {
-        if (funnyParts[index]) {
-            textNode.node.textContent = funnyParts[index];
+async function splitContentIntoChunks(textNodes, maxChunkSize = 5) {
+    let chunks = [];
+    let currentChunk = [];
+    
+    const isEndOfSentence = (text) => {
+        const trimmed = text.trim();
+        return trimmed.endsWith('.') || 
+               trimmed.endsWith('!') || 
+               trimmed.endsWith('?') || 
+               trimmed.endsWith('".');
+    };
+
+    const shouldStartNewChunk = (currentNode, nextNode) => {
+        // Always start new chunk on heading
+        if (nextNode && nextNode.isHeading) return true;
+        
+        // Start new chunk if we're at max size AND at end of sentence
+        if (currentChunk.length >= maxChunkSize) {
+            // Check if current chunk ends with a complete sentence
+            const lastNodeText = currentNode.text;
+            if (isEndOfSentence(lastNodeText)) {
+                return true;
+            }
+            
+            // If we're way over max size, force a new chunk
+            if (currentChunk.length >= maxChunkSize * 1.5) {
+                return true;
+            }
+        }
+        
+        return false;
+    };
+    
+    textNodes.forEach((node, index) => {
+        const nextNode = index < textNodes.length - 1 ? textNodes[index + 1] : null;
+        
+        if (currentChunk.length === 0) {
+            // Start new chunk
+            currentChunk.push(node);
+        } else if (shouldStartNewChunk(node, nextNode)) {
+            // Complete current chunk and start new one
+            currentChunk.push(node);
+            chunks.push(currentChunk);
+            currentChunk = [];
+        } else {
+            // Add to current chunk
+            currentChunk.push(node);
         }
     });
+    
+    // Add the last chunk if it exists
+    if (currentChunk.length > 0) {
+        chunks.push(currentChunk);
+    }
+    
+    return chunks;
+}
+
+async function processAndUpdateChunk(chunk) {
+    // Create text for this chunk
+    const chunkText = chunk
+        .map(node => node.text)
+        .join('\n---SPLIT---\n');
+
+    // Transform chunk
+    const funnyVersion = await callOpenAI(chunkText);
+    if (!funnyVersion) return;
+
+    // Update DOM immediately for this chunk
+    const funnyParts = funnyVersion.split('---SPLIT---');
+    chunk.forEach((textNode, index) => {
+        if (funnyParts[index]) {
+            requestAnimationFrame(() => {
+                textNode.node.textContent = funnyParts[index];
+            });
+        }
+    });
+}
+
+async function processContentInParallel(content) {
+    // Split content into manageable chunks
+    const chunks = await splitContentIntoChunks(content.textNodes);
+    
+    // Process chunks in parallel with a concurrency limit
+    const concurrencyLimit = 3; // Process 3 chunks at a time
+    
+    for (let i = 0; i < chunks.length; i += concurrencyLimit) {
+        const batch = chunks.slice(i, i + concurrencyLimit);
+        await Promise.all(batch.map(chunk => processAndUpdateChunk(chunk)));
+    }
 }
 
 // Add a loading indicator
@@ -176,33 +259,22 @@ function showLoading() {
         border-radius: 5px;
         z-index: 10000;
     `;
-    loadingDiv.textContent = 'Stand by... the Force is about to awaken on this page';
+    loadingDiv.textContent = 'Stand by... the Force is awakened on this page 💫';
     document.body.appendChild(loadingDiv);
     return loadingDiv;
 }
 
+// Modify the main execution
 (async () => {
     try {
-        // 1. Get main content
         const content = await getMainContent();
         if (!content) return;
 
-        // Show loading indicator
         const loader = showLoading();
-
-        // 2. Transform content
-        const funnyVersion = await callOpenAI(content.fullText);
-        if (!funnyVersion) {
-            loader.remove();
-            return;
-        }
-
-        // 3. Replace content
-        await replaceTextContent(content.textNodes, funnyVersion);
-
-        // Remove loading indicator
+        
+        await processContentInParallel(content);
+        
         loader.remove();
-
     } catch (error) {
         console.error('Error:', error);
         document.getElementById('funny-loader')?.remove();
