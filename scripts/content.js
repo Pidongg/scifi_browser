@@ -521,11 +521,22 @@ function showLoading() {
     return loadingDiv;
 }
 
+function changeMousePosition() {
+    fetch('http://localhost:5000/mouse-position')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Mouse Position:', data);
+            // You can do something with the coordinates here
+        })
+        .catch(error => console.error('Error:', error));
+}
+
 // Modify the main execution
 (async () => {
     try {
         const loader = showLoading();
-        
+        // Poll every 100ms (adjust this value as needed)
+        setInterval(changeMousePosition, 100);
         // Process text content
         // const content = await getMainContent();
         // if (content) {
@@ -533,11 +544,11 @@ function showLoading() {
         // }
         
         // Process images
-        const images = await getImages();
-        if (images.length > 0) {
-            updateLoader('Starting image transformation...');
-            await processImagesInParallel(images);
-        }
+        // const images = await getImages();
+        // if (images.length > 0) {
+        //     updateLoader('Starting image transformation...');
+        //     await processImagesInParallel(images);
+        // }
         
         loader.remove();
     } catch (error) {
