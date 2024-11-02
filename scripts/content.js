@@ -245,6 +245,263 @@ async function processContentInParallel(content) {
     }
 }
 
+async function getImages() {
+    const skipSelectors = [
+        'nav img', 
+        'header img', 
+        'footer img',
+        '.logo',
+        '.avatar',
+        '.icon',
+        'button img'
+    ];
+
+    // Get all images except those matching skip selectors
+    const images = Array.from(document.querySelectorAll('img'))
+        .filter(img => {
+            // Skip tiny images (likely icons)
+            if (img.width < 100 || img.height < 100) return false;
+            // Skip already processed images
+            if (img.dataset.processed || img.dataset.processingFailed) return false;
+            // Skip images matching selectors
+            return !skipSelectors.some(selector => img.matches(selector));
+        });
+
+    return images;
+}
+
+function resizeImage(img, targetWidth = 1024, targetHeight = 1024) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Calculate aspect ratio
+    const aspectRatio = img.naturalWidth / img.naturalHeight;
+
+    // Find the best matching allowed dimensions
+    const allowedDimensions = [
+        [1024, 1024],
+        [1152, 896],
+        [1216, 832],
+        [1344, 768],
+        [1536, 640],
+        [640, 1536],
+        [768, 1344],
+        [832, 1216],
+        [896, 1152]
+    ];
+
+    // Find best matching dimensions based on aspect ratio
+    let bestDimensions = allowedDimensions[0];
+    let bestRatioDiff = Math.abs(aspectRatio - (bestDimensions[0] / bestDimensions[1]));
+
+    for (const dims of allowedDimensions) {
+        const ratioDiff = Math.abs(aspectRatio - (dims[0] / dims[1]));
+        if (ratioDiff < bestRatioDiff) {
+            bestRatioDiff = ratioDiff;
+            bestDimensions = dims;
+        }
+    }
+
+    // Set canvas size to match chosen dimensions
+    canvas.width = bestDimensions[0];
+    canvas.height = bestDimensions[1];
+
+    // Draw image with proper scaling
+    ctx.drawImage(img, 0, 0, bestDimensions[0], bestDimensions[1]);
+    
+    return canvas;
+}
+
+async function imageToBase64(img) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Create a new image to handle CORS
+            const corsImage = new Image();
+            corsImage.crossOrigin = "anonymous";
+
+            corsImage.onload = () => {
+                try {
+                    // Resize image to allowed dimensions
+                    const canvas = resizeImage(corsImage);
+                    const base64 = canvas.toDataURL('image/png').split(',')[1];
+                    resolve(base64);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+
+            corsImage.onerror = () => {
+                reject(new Error('Failed to load image'));
+            };
+
+            // Add a proxy if the image fails to load with CORS
+            const tryWithProxy = () => {
+                corsImage.src = `https://cors-anywhere.herokuapp.com/${img.src}`;
+            };
+
+            corsImage.src = img.src;
+            corsImage.addEventListener('error', tryWithProxy);
+
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+async function transformImage(img) {
+    try {
+        // Skip if image is already processed or invalid
+        if (img.dataset.processed || !img.complete || !img.naturalWidth) {
+            return;
+        }
+
+        // Store original dimensions
+        const originalWidth = img.width;
+        const originalHeight = img.height;
+        const originalStyle = img.style.cssText; // Store any original styling
+
+        // Convert image to base64
+        const base64Image = await imageToBase64(img);
+        if (!base64Image) return;
+
+        // Create FormData
+        const formData = new FormData();
+        
+        // Convert base64 to blob
+        const byteCharacters = atob(base64Image);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/png' });
+        
+        // Add all required fields to FormData
+        formData.append('init_image', blob);
+        formData.append('image_strength', '0.35');
+        formData.append('init_image_mode', 'IMAGE_STRENGTH');
+        formData.append('samples', '1');
+        formData.append('steps', '30');
+        formData.append('cfg_scale', '7');
+        formData.append('text_prompts[0][text]', 'Convert to Star Wars style, same composition but add Star Wars elements like droids, spaceships, or alien species in background. Make it look like it was taken on Tatooine or a Star Wars planet.');
+        formData.append('text_prompts[0][weight]', '1');
+        formData.append('text_prompts[1][text]', 'bad quality, blurry, distorted');
+        formData.append('text_prompts[1][weight]', '-1');
+
+        // Call Stability AI API
+        const response = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${config.STABILITY_API_KEY}`
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Stability API Error:', errorData);
+            throw new Error(`API Error: ${errorData.message || response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        // Update image source while maintaining original dimensions
+        if (data.artifacts && data.artifacts[0]) {
+            const newImageBase64 = data.artifacts[0].base64;
+            console.log(`Received new image data for ${img.src.substring(0, 50)}...`);
+            
+            // Create a new image to handle the load event
+            const newImg = new Image();
+            newImg.onload = () => {
+                console.log('New image loaded successfully:', {
+                    originalWidth,
+                    originalHeight,
+                    originalStyle,
+                    newImgWidth: newImg.width,
+                    newImgHeight: newImg.height
+                });
+
+                // Apply original dimensions and styling
+                img.width = originalWidth;
+                img.height = originalHeight;
+                img.style.cssText = originalStyle;
+                img.src = newImg.src;  // Set the source after dimensions are set
+                img.dataset.processed = 'true';
+                
+                console.log('Image replacement complete:', {
+                    element: img,
+                    finalWidth: img.width,
+                    finalHeight: img.height,
+                    processed: img.dataset.processed
+                });
+            };
+            
+            newImg.onerror = (error) => {
+                console.error('Failed to load new image:', error);
+            };
+            
+            console.log('Starting to load new image...');
+            newImg.src = `data:image/png;base64,${newImageBase64}`;
+        } else {
+            console.warn('No artifacts received from API for:', img.src);
+        }
+    } catch (error) {
+        console.error('Image transformation error:', error);
+        img.dataset.processingFailed = 'true';
+        
+        // Log detailed error information
+        if (error.response) {
+            const errorText = await error.response.text();
+            console.error('API Response:', errorText);
+        }
+    }
+}
+
+// Add rate limiting and retries
+async function processImagesInParallel(images) {
+    const batchSize = 4;  // Smaller batch size
+    const delay = 2000;   // Longer delay between batches
+    const maxRetries = 3; // Number of retries for failed requests
+    
+    for (let i = 0; i < images.length; i += batchSize) {
+        const batch = images.slice(i, i + batchSize);
+        
+        // Show progress
+        const progress = Math.round((i / images.length) * 100);
+        updateLoader(`Transforming images: ${progress}%`);
+        
+        // Process batch with retries
+        const processWithRetry = async (img, retryCount = 0) => {
+            try {
+                await transformImage(img);
+            } catch (error) {
+                if (retryCount < maxRetries) {
+                    console.log(`Retrying image ${retryCount + 1}/${maxRetries}`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    return processWithRetry(img, retryCount + 1);
+                }
+                throw error;
+            }
+        };
+        
+        // Process batch in parallel
+        await Promise.all(batch.map(img => processWithRetry(img)));
+        
+        // Wait before processing next batch
+        if (i + batchSize < images.length) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
+
+function updateLoader(text) {
+    const loader = document.getElementById('funny-loader');
+    if (loader) {
+        loader.textContent = text;
+    }
+}
+
 // Add a loading indicator
 function showLoading() {
     const loadingDiv = document.createElement('div');
@@ -267,12 +524,20 @@ function showLoading() {
 // Modify the main execution
 (async () => {
     try {
-        const content = await getMainContent();
-        if (!content) return;
-
         const loader = showLoading();
         
-        await processContentInParallel(content);
+        // Process text content
+        // const content = await getMainContent();
+        // if (content) {
+        //     await processContentInParallel(content);
+        // }
+        
+        // Process images
+        const images = await getImages();
+        if (images.length > 0) {
+            updateLoader('Starting image transformation...');
+            await processImagesInParallel(images);
+        }
         
         loader.remove();
     } catch (error) {
