@@ -608,14 +608,14 @@ function playClickSound() {
 
         // Initial content processing
         const content = await getMainContent();
-        // if (content) {
-        //     processContentInParallel(content);
-        // }
+        if (content) {
+            processContentInParallel(content);
+        }
         const find_and_process_all_images = async () => {
             const images = getImages();
             if (images.length > 0) {
                 // updateLoader('Starting image transformation...');
-                processImagesInParallel(images, true);
+                processImagesInParallel(images, false);
             }
         }
         
