@@ -1,57 +1,48 @@
-:host {
-    position: fixed;
-    top: 0;
-    left: 0;
+#shadow-overlay {
     width: 100%;
-    height: 100%;
+    height: 100vh;
     background: black;
-    z-index: 999999;
-    font-family: Arial, sans-serif;
 }
 
 #star-wars-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    background: black;
     z-index: 999999;
-    color: #FFE81F;  /* More accurate Star Wars yellow */
+    position: fixed;
     background: black;
-    height: 100%;
+    color: #FFE81F;  /* More accurate Star Wars yellow */
     overflow-y: scroll;
-
-    height: 300vh; /* Makes the page scrollable */
-    margin: 0;
+    height: 100%;
+    width: 100%;
+    margin: 20;
     overflow-x: hidden;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    transform-origin: 50% 40%;
+    transform: perspective(300px) rotateX(20deg);
+    font-family: Arial, sans-serif;
 }
 
-#star-wars-overlay > #target {
-    position: fixed;  /* Changed to fixed */
-    top: 50%;        /* Center vertically */
-    left: 50%;       /* Center horizontally */
-    transform: translate(-50%, -50%);  /* Center the container */
-    width: 100%;
-    height: 100vh;
-    overflow: hidden;
+
+#target {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
     font-size: 30px;
     text-align: center;
     font-family: sans-serif;
-    perspective: 300px;  /* Moved perspective to container */
 }
 
-#star-wars-overlay > #target > div {
-    position: absolute;
-    left: 0;
-    right: 0;
-    padding: 20px;
-    transform-origin: center center;
-    transform: rotateX(45deg) translateZ(0);  /* Initial transform */
-    max-width: 800px;    /* Limit text width */
-    margin: 0 auto;      /* Center text horizontally */
+#target > div {
+    padding-top: 100vh;
+    transform: translateY(0);
+    will-change: transform;
+    overflow-y: visible;
 }
 
-/* Style the text to match Star Wars */
 h1 {
     font-size: 3em;
     margin-bottom: 0.5em;
@@ -65,5 +56,25 @@ h2 {
 p {
     font-size: 1.2em;
     line-height: 1.6;
-    margin-bottom: 2em;
+    margin-left: 5em;
+    margin-right: 5em;
+}
+
+#shadow-overlay::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 350px;
+    z-index: 1000000;
+    pointer-events: none;
+    background: linear-gradient(
+        to bottom,
+        rgb(0, 0, 0) 0%,
+        rgb(0, 0, 0) 20%,
+        rgba(0, 0, 0, 0.95) 40%,
+        rgba(0, 0, 0, 0.85) 60%,
+        rgba(0, 0, 0, 0) 100%
+    );
 }

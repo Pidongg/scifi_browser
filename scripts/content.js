@@ -581,8 +581,35 @@ function changeMousePosition() {
     }
 })();
 
+function generateHTMLFromContent(mainContent) {
+    const textNodes = mainContent.textNodes;
+    let output = "";
+    textNodes.forEach((node) => {
+        someText = (node.text).replace(/(\r\n|\n|\r)/gm, "");
+        if (node.isHeading) {
+            output += `<h1>${someText}</h1>`;
+        } else {
+            output += `<p>${someText}</p>`;
+        }
+    })
+    console.log(output);
+    return output;
+}
 
 async function createStarWarsOverlay() {
+    const blackBackground = document.createElement('div');
+    blackBackground.id = 'black-bg';
+
+    blackBackground.style.cssText = `
+        z-index: 99998;
+        background: black;
+        position: fixed;  /* or absolute */
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+    `;
     const overlay = document.createElement('div');
     overlay.id = 'shadow-overlay';
 
@@ -590,55 +617,44 @@ async function createStarWarsOverlay() {
   
     const cssURL = chrome.runtime.getURL('styles.css');
     const cssText = await fetch(cssURL).then(response => response.text());
-    console.log("textstuff:");
-    console.log(cssText);
-    //TODO: use real page content
+    
+    const mainContent = await getMainContent();
+    console.log("maincontent");
+    console.log(mainContent);
+    const textContent = generateHTMLFromContent(mainContent);
+
     shadow.innerHTML = `
         <style>${cssText}</style>
         <div id="star-wars-overlay">
             <div id="target">
                 <div>
-                    <h1>EPISODE IV</h1>
-                    <h2>A NEW HOPE</h2>
-                    <p>It is a period of civil war. Rebel spaceships, striking from a hidden base, have won their first victory against the evil Galactic Empire.</p>
-                    <p>During the battle, Rebel spies managed to steal secret plans to the Empire's ultimate weapon, the DEATH STAR, an armored space station with enough power to destroy an entire planet.</p>
-                    <p>Pursued by the Empire's sinister agents, Princess Leia races home aboard her starship, custodian of the stolen plans that can save her people and restore freedom to the galaxy....</p>
-                    <p>The Empire's forces continue their pursuit, determined to recover the stolen plans and crush the Rebellion before it can gain further momentum.</p>
-                    <p>As the chase intensifies across the vast expanse of space, the fate of countless worlds hangs in the balance, and the galaxy watches with bated breath...</p>
+                    ${textContent}
                 </div>
             </div>
         </div>
     `;
     
+    console.log("overlay")
+    console.log(overlay)
+    document.body.appendChild(blackBackground);
     document.body.appendChild(overlay);
 
     const shadowOverlay = document.querySelector('#shadow-overlay');
     const shadowContent = shadowOverlay.shadowRoot;
     const content = shadowContent.querySelector('#target > div');
-    const scrollFactor = 1.5; // Adjust this to change scroll sensitivity
+    const scrollMultiplier = 2; // Adjust this value to change scroll speed
 
-    // Set initial position
-    updatePosition(window.scrollY);
-
-    // Update text position based on window scroll
-    window.addEventListener('scroll', () => {
-        updatePosition(window.scrollY);
+    // Use passive event listener for better scroll performance
+    window.addEventListener('scroll', function() {
+        const scrollPosition = window.scrollY || document.documentElement.scrollTop;
+        const translateY = -scrollPosition * scrollMultiplier;
+        content.style.transform = `translateY(${translateY}px)`;
     });
-
-    function updatePosition(scrollPosition) {
-        // Calculate new rotation and position
-        const baseRotation = 45;  // Base rotation angle
-        const translateY = -scrollPosition * scrollFactor;
-        
-        content.style.transform = `
-            rotateX(${baseRotation}deg)
-            translateY(${translateY}px)
-            translateZ(0)
-        `;
-    };
 }
   
 function removeStarWarsOverlay() {
     const overlay = document.getElementById('shadow-overlay');
     if (overlay) overlay.remove();
+    const blackbg = document.getElementById('black-bg');
+    if (blackbg) blackbg.remove();
 }
