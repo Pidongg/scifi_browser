@@ -262,7 +262,7 @@ async function getImages() {
             // Skip tiny images (likely icons)
             if (img.width < 100 || img.height < 100) return false;
             // Skip already processed images
-            if (img.dataset.processed || img.dataset.processingFailed) return false;
+            if (img.processed || img.in_queue) return false;
             // Skip images matching selectors
             return !skipSelectors.some(selector => img.matches(selector));
         });
@@ -340,6 +340,7 @@ async function imageToBase64(img) {
             };
 
             corsImage.src = img.src;
+            corsImage.processed = true;
             corsImage.addEventListener('error', tryWithProxy);
 
         } catch (error) {
@@ -351,9 +352,10 @@ async function imageToBase64(img) {
 async function transformImage(img) {
     try {
         // Skip if image is already processed or invalid
-        if (img.dataset.processed || !img.complete || !img.naturalWidth) {
+        if (img.processed || !img.complete || !img.naturalWidth || !img.src) {
             return;
         }
+        img.processed = true;
 
         // Store original dimensions
         const originalWidth = img.width;
@@ -383,10 +385,14 @@ async function transformImage(img) {
         formData.append('samples', '1');
         formData.append('steps', '30');
         formData.append('cfg_scale', '7');
-        formData.append('text_prompts[0][text]', 'Convert to Star Wars style, same composition but add Star Wars elements like droids, spaceships, or alien species in background. Make it look like it was taken on Tatooine or a Star Wars planet.');
-        formData.append('text_prompts[0][weight]', '1');
+        formData.append('text_prompts[0][text]', 'Convert to (Star Wars) style, same composition but add Star Wars elements like droids, spaceships, or alien species in background. Make it look like it was taken on Tatooine or a Star Wars planet. Add Star Wars alien features to people.');
+        formData.append('text_prompts[0][weight]', '1.5');
         formData.append('text_prompts[1][text]', 'bad quality, blurry, distorted');
         formData.append('text_prompts[1][weight]', '-1');
+        if (img.alt) {
+            formData.append('text_prompts[2][text]', img.alt)
+            formData.append('text_prompts[2][weight]', '0.5');
+        }
 
         // Call Stability AI API
         const response = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image', {
@@ -412,37 +418,27 @@ async function transformImage(img) {
             console.log(`Received new image data for ${img.src.substring(0, 50)}...`);
             
             // Create a new image to handle the load event
-            const newImg = new Image();
-            newImg.onload = () => {
-                console.log('New image loaded successfully:', {
-                    originalWidth,
-                    originalHeight,
-                    originalStyle,
-                    newImgWidth: newImg.width,
-                    newImgHeight: newImg.height
-                });
-
-                // Apply original dimensions and styling
-                img.width = originalWidth;
-                img.height = originalHeight;
-                img.style.cssText = originalStyle;
-                img.src = newImg.src;  // Set the source after dimensions are set
-                img.dataset.processed = 'true';
-                
-                console.log('Image replacement complete:', {
-                    element: img,
-                    finalWidth: img.width,
-                    finalHeight: img.height,
-                    processed: img.dataset.processed
-                });
-            };
+            img.removeAttribute('srcset');
+            img.removeAttribute('sizes');
+            img.width = originalWidth;
+            img.height = originalHeight;
+            img.style.cssText = originalStyle;
             
-            newImg.onerror = (error) => {
-                console.error('Failed to load new image:', error);
-            };
+            // Force the new src and prevent srcset from being used
+            img.src = `data:image/png;base64,${newImageBase64}`;
+            img.dataset.processed = 'true';
             
-            console.log('Starting to load new image...');
-            newImg.src = `data:image/png;base64,${newImageBase64}`;
+            // Force a reload to ensure the new image is displayed
+            const parent = img.parentNode;
+            if (parent.tagName === 'PICTURE') {
+                // Remove all source elements if within a picture element
+                Array.from(parent.getElementsByTagName('source')).forEach(source => source.remove());
+            }
+            
+            // Force browser to re-evaluate the image
+            img.style.display = 'none';
+            img.offsetHeight; // Trigger reflow
+            img.style.display = '';
         } else {
             console.warn('No artifacts received from API for:', img.src);
         }
@@ -460,6 +456,8 @@ async function transformImage(img) {
 
 // Add rate limiting and retries
 async function processImagesInParallel(images) {
+    images.forEach((image) => {image.in_queue = true;});
+
     const batchSize = 4;  // Smaller batch size
     const delay = 2000;   // Longer delay between batches
     const maxRetries = 3; // Number of retries for failed requests
@@ -492,6 +490,35 @@ async function processImagesInParallel(images) {
         if (i + batchSize < images.length) {
             await new Promise(resolve => setTimeout(resolve, delay));
         }
+    }
+}
+
+async function process_images(images) {
+    const delay = 500;
+
+    const processWithRetry = async (img, retryCount = 0) => {
+        try {
+            await transformImage(img);
+        } catch (error) {
+            if (retryCount < maxRetries) {
+                console.log(`Retrying image ${retryCount + 1}/${maxRetries}`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return processWithRetry(img, retryCount + 1);
+            }
+            throw error;
+        }
+    };
+
+    const total = images.length;
+    count = 0
+
+    while (images.length > 0) {
+        let image = images.shift()
+        await transformImage(image);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        count += 1;
+        const progress = Math.round((count / total) * 100);
+        updateLoader(`Transforming images: ${progress}%`);
     }
 }
 
@@ -536,19 +563,28 @@ function changeMousePosition() {
     try {
         const loader = showLoading();
         // Poll every 100ms (adjust this value as needed)
-        setInterval(changeMousePosition, 100);
+        // setInterval(changeMousePosition, 100);
         // Process text content
         // const content = await getMainContent();
         // if (content) {
         //     await processContentInParallel(content);
         // }
         
-        // Process images
-        // const images = await getImages();
-        // if (images.length > 0) {
-        //     updateLoader('Starting image transformation...');
-        //     await processImagesInParallel(images);
-        // }
+
+        const find_and_process_all_images = async () => {
+            const images = await getImages();
+            console.log(images.length)
+            if (images.length > 0) {
+                // updateLoader('Starting image transformation...');
+                await processImagesInParallel(images);
+            }
+        }
+        
+        let interval = setInterval(async () => {
+            find_and_process_all_images()
+        }, 5000);
+
+        setTimeout(() => {clearInterval(interval)}, 60000);
         
         loader.remove();
     } catch (error) {
