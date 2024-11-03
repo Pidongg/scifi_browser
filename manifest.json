@@ -1,19 +1,19 @@
 {
-    "manifest_version": 3,
-    "name": "scifi_broswer",
-    "version": "1.0",
-    "description": "TODO",    
-    "icons": {
-    "16": "images/icon-16.png",
-    "32": "images/icon-32.png",
-    "48": "images/icon-48.png",
-    "128": "images/icon-128.png"
-  },
+  "name": "scifi_broswer",
+  "version": "1.0",
+  "manifest_version": 3,
+  "description": "A Chrome extension that allows you to browse the web in a sci-fi style.",
   "content_scripts": [
     {
-      "js": ["scripts/readability.js","scripts/content.js"],
+      "js": [
+        "scripts/readability.js",
+        "scripts/content.js"
+      ],
       "matches": ["<all_urls>"]
     }
   ],
-"permissions": ["activeTab", "scripting"]
-  }
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ]
+}
