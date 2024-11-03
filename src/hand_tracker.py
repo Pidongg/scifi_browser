@@ -1,12 +1,16 @@
-import json
+import time
 import cv2
+import mediapipe as mp
+import numpy as np
 from cvzone.HandTrackingModule import HandDetector
+from interpret_gestures import interpret_gesture
 
 
 def start_hand_tracking(hand_data: dict) -> None:
     """
     Start the hand tracking process.
     """
+    
 
     # Initialize the webcam and hand detector
     cap: cv2.VideoCapture = cv2.VideoCapture(0) # 0 for built-in camera
@@ -39,55 +43,75 @@ def process_frame(detector: HandDetector, img: cv2.Mat, hand_data: dict) -> cv2.
     """
     Process a frame from the webcam.
     """
-    
     hands, img = detector.findHands(img, draw=True, flipType=True)
-    
-    if hands:
-        hand1 = hands[0]  # first hand detected
-        lmList1 = hand1["lmList"]  # List of 21 landmarks for the first hand
-        bbox1 = hand1["bbox"]  # Bounding box around the first hand (x,y,w,h coordinates)
-        center1 = hand1['center']  # Center coordinates of the first hand
-        handType1 = hand1["type"]  # Type of the first hand ("Left" or "Right")
+    process_hands(hands, detector, img, hand_data)
+    return img
 
-        # Count the number of fingers up for the first hand
-        fingers1 = detector.fingersUp(hand1)
-        # print(f'H1 = {fingers1.count(1)}', end=" ")  # Print the count of fingers that are up
-        hand_data[handType1] = {
-            'fingers': fingers1,
-            'center': center1,
-            'lmList': lmList1
+
+def process_hands(hands: list[dict], detector: HandDetector, img: cv2.Mat, hand_data: dict) -> None:
+    """
+    Process hand coordinates and add them to the hand_data dictionary.
+    """
+
+    hand_data["num_hands"] = len(hands)
+    centers = []
+
+    for i, hand in enumerate(hands):
+        name = f"hand{i+1}"
+        lmList = hand["lmList"]  # List of 21 landmarks for the hand
+        bbox = hand["bbox"]  # Bounding box around the first hand (x,y,w,h coordinates)
+        center = hand['center']  # Center coordinates of the hand
+        handType = hand["type"]  # Type of the hand ("Left" or "Right")
+        fingers = detector.fingersUp(hand)
+
+        hand_data[name] = {
+            'type': handType,
+            'fingers': fingers,
+            'center': center,
+            'bbox': bbox,
+            'lmList': lmList,
         }
 
-        # Calculate distance between specific landmarks on the first hand and draw it on the image
-        # length, info, img = detector.findDistance(lmList1[8][0:2], lmList1[12][0:2], img, color=(255, 0, 255),scale=10)
+        centers.append(center[:2])
 
-        # Check if a second hand is detected
-        if len(hands) == 2:
-            # Information for the second hand
-            hand2 = hands[1]
-            lmList2 = hand2["lmList"]
-            bbox2 = hand2["bbox"]
-            center2 = hand2['center']
-            handType2 = hand2["type"]
+    # Center of both hands
+    if centers:
+        x_center = sum(center[0] for center in centers) / len(centers)
+        y_center = sum(center[1] for center in centers) / len(centers)
 
-            # Count the number of fingers up for the second hand
-            fingers2 = detector.fingersUp(hand2)
-            # print(f'H2 = {fingers2.count(1)}', end=" ")
-
-            hand_data[handType2] = {
-                'fingers': fingers2,
-                'center': center2,
-                'lmList': lmList2
-            }
-
-            # Calculate distance between the index fingers of both hands and draw it on the image
-            print(f"Left: {lmList1[8][0:2]}, Right: {lmList2[8][0:2]}")
-            length, info, img = detector.findDistance(lmList1[8][0:2], lmList2[8][0:2], img, color=(255, 0, 0),
-                                                    scale=10)
-
-        print(" ")  # New line for better readability of the printed output
-
-    # print(json.dumps(hand_data, indent=2))
-    # print(hand_data)
+        # Y velocity of the center of both hands
+        cur_time = time.time()
+        hand_data["x_velocity"] = (x_center - hand_data["center"][0]) / (cur_time - hand_data["last_update"])
+        hand_data["y_velocity"] = - (y_center - hand_data["center"][1]) / (cur_time - hand_data["last_update"])
+        hand_data["last_update"] = cur_time
+        hand_data["center"] = [x_center, y_center]
+    else:
+        hand_data["x_velocity"] = 0
+        hand_data["y_velocity"] = 0
     
-    return img
+    if len(hands) >= 2:
+        check_horizontal_alignment(detector, img, hand_data)
+    interpret_gesture(hand_data)
+
+
+def check_horizontal_alignment(detector: HandDetector, img: cv2.Mat, hand_data: dict) -> None:
+    """
+    Check if the hands are horizontally aligned.
+    """
+
+    hand1 = hand_data["hand1"]
+    hand2 = hand_data["hand2"]
+
+    middle_finger_tip_1 = hand1["lmList"][12][0:2] # x, y coordinates
+    middle_finger_tip_2 = hand2["lmList"][12][0:2]
+
+    length, info, img = detector.findDistance(
+        middle_finger_tip_1, middle_finger_tip_2, img, color=(255, 0, 255), scale=10
+    )
+
+    # Calculate the angle between the two middle finger tips
+    delta_y = max(abs(middle_finger_tip_2[1] - middle_finger_tip_1[1]), 1)
+    delta_x = max(abs(middle_finger_tip_2[0] - middle_finger_tip_1[0]), 1)
+    slope = delta_y / delta_x
+
+    hand_data["middle_finger_slope"] = slope
