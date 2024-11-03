@@ -4,6 +4,26 @@ let lastScrollTime = Date.now();
 let scrollSound = null;
 let lastClickTime = Date.now();
 let clickSound = null;
+let themeSongPlayer = null;
+
+function playMainTheme() {
+    if (!themeSongPlayer) {
+        themeSongPlayer = new Audio(chrome.runtime.getURL('sounds/theme_song.mp3'));
+        console.log("player init")
+    }
+    // If sound has ended, reset to beginning
+    if (themeSongPlayer.ended) {
+        themeSongPlayer.currentTime = 0;
+    }
+    themeSongPlayer.play();
+    console.log("playing")
+}
+
+function pauseMainTheme() {
+    if (themeSongPlayer) {
+        themeSongPlayer.pause();
+    }
+}
 
 async function getMainContent() {
     // Always use body as the main element
@@ -481,6 +501,7 @@ chrome.storage.local.get(['isEnabled'], function(result) {
   isEnabled = result.isEnabled || false;
   if (isEnabled) {
     createStarWarsOverlay();
+    playMainTheme();
   }
 });
 
@@ -490,8 +511,10 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     isEnabled = request.isEnabled;
     if (isEnabled) {
       createStarWarsOverlay();
+      playMainTheme();
     } else {
       removeStarWarsOverlay();
+      pauseMainTheme();
     }
   }
 });
@@ -697,7 +720,6 @@ async function createStarWarsOverlay() {
     const content = shadowContent.querySelector('#target > div');
     const scrollMultiplier = 2; // Adjust this value to change scroll speed
 
-    // Use passive event listener for better scroll performance
     window.addEventListener('scroll', function() {
         const scrollPosition = window.scrollY || document.documentElement.scrollTop;
         const translateY = -scrollPosition * scrollMultiplier;
