@@ -1,5 +1,9 @@
 let isEnabled = false;
 let restorableState = null;
+let lastScrollTime = Date.now();
+let scrollSound = null;
+let lastClickTime = Date.now();
+let clickSound = null;
 
 async function getMainContent() {
     // Always use body as the main element
@@ -370,8 +374,10 @@ async function transformImage(img, test = false) {
             return;
         }
         img.processed = true;
-        img.style.border = "5px solid green";
-        if (test) return;
+        if (test){
+            img.style.border = "5px solid green";
+            return;
+        }
 
         // Store original dimensions
         const originalWidth = img.width;
@@ -575,14 +581,36 @@ const urlObserver = new MutationObserver(async (mutations) => {
     }
 });
 
+function initializeClickSound() {
+    clickSound = new Audio(chrome.runtime.getURL('sounds/test_sound.wav'));
+    clickSound.volume = 1.0;
+}
+
+function playClickSound() {
+    const now = Date.now();
+    if (now - lastClickTime > 200) {
+        if (clickSound) {
+            // Create a new Audio object for each play
+            const soundClone = clickSound.cloneNode();
+            soundClone.play().catch(e => console.log('Sound play failed:', e));
+            lastClickTime = now;
+        }
+    }
+}
+
 // Modify the main execution
 (async () => {
     try {
+        initializeClickSound();
+        
+        // Add click event listener to document
+        document.addEventListener('click', playClickSound, { passive: true });
+
         // Initial content processing
         const content = await getMainContent();
-        if (content) {
-            processContentInParallel(content);
-        }
+        // if (content) {
+        //     processContentInParallel(content);
+        // }
         const find_and_process_all_images = async () => {
             const images = getImages();
             if (images.length > 0) {
