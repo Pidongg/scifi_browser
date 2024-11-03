@@ -1,76 +1,73 @@
-async function getPageContent() {
-    const documentClone = document.cloneNode(true);
-    const article = new Readability(documentClone,{}).parse();
-    return article;
-}
+let isEnabled = false;
+const stateManager = null;
+let restorableState = null;
 
-async function fetchBackendData(article) {
-    const url = 'https://lyknvzu9y8.execute-api.eu-west-3.amazonaws.com/new/GenerateText';
-    console.log(url);
-    try {
-        const requestOptions = {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ title: article.title, textContent: article.textContent })
-        };
+// Check saved state on load
+chrome.storage.local.get(['isEnabled'], function(result) {
+  isEnabled = result.isEnabled || false;
+  if (isEnabled) {
+    createStarWarsOverlay();
+  }
+});
 
-        const response = await fetch(url, requestOptions);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response;
-        return data.json();
-    } catch (error) {
-        console.error('Error fetching backend data:', error);
-        throw error;
+// Listen for toggle events
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  if (request.action === 'toggleStyle') {
+    isEnabled = request.isEnabled;
+    if (isEnabled) {
+      createStarWarsOverlay();
+    } else {
+      removeStarWarsOverlay();
     }
-}
+  }
+});
 
-(async () => {
-    const article = await getPageContent();
-    const text = article.textContent;
+function createStarWarsOverlay() {
+    const overlay = document.createElement('div');
+    overlay.id = 'star-wars-overlay';
+    
+    // TODO: change this to use real page content
+    overlay.innerHTML = `
+        <div id="target">
+            <div>
+                <h1>EPISODE IV</h1>
+                <h2>A NEW HOPE</h2>
+                <p>It is a period of civil war. Rebel spaceships, striking from a hidden base, have won their first victory against the evil Galactic Empire.</p>
+                <p>During the battle, Rebel spies managed to steal secret plans to the Empire's ultimate weapon, the DEATH STAR, an armored space station with enough power to destroy an entire planet.</p>
+                <p>Pursued by the Empire's sinister agents, Princess Leia races home aboard her starship, custodian of the stolen plans that can save her people and restore freedom to the galaxy....</p>
+                <p>The Empire's forces continue their pursuit, determined to recover the stolen plans and crush the Rebellion before it can gain further momentum.</p>
+                <p>As the chase intensifies across the vast expanse of space, the fate of countless worlds hangs in the balance, and the galaxy watches with bated breath...</p>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
 
-    const contentWords = text.split(' ').length;
-    const readingTime = Math.ceil((contentWords / 229) * 2) / 2;
+    const content = document.querySelector('#target > div');
+    const scrollFactor = 1.5; // Adjust this to change scroll sensitivity
 
-    const badge = document.createElement("p");
+    // Set initial position
+    updatePosition(window.scrollY);
 
-    // Use the same styling as the publish information in an article's header
-    badge.classList.add("text-black", "type--caption");
-    badge.textContent = `⏱️ ${readingTime} min read`;
+    // Update text position based on window scroll
+    window.addEventListener('scroll', () => {
+        updatePosition(window.scrollY);
+    });
 
-    // Support for API reference docs
-    const heading = document.querySelector("h1") ||document.querySelector("h2");
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.flexDirection = "column";
-    container.style.alignItems = "flex-start"; // Adjust alignment as needed
-
-    // Fetch data from the backend with the article object
-    try {
-        const backendData = await fetchBackendData(article);
-        console.log("Backend data:", backendData.response);
-
-        const summary = document.createElement("p");
-
-    // Use the same styling as the publish information in an article's header
-    badge.classList.add("text-black", "type--caption");
-    badge.style.fontSize = "16px";
-    summary.style.fontStyle = "italic";
-    summary.textContent = backendData.response;
-    summary.style.fontSize = "16px";
-
-     // Insert the container before the heading
-     heading.parentNode.insertBefore(container, heading);
-
-     // Move the heading and badge into the container
-     container.appendChild(heading);
-     container.appendChild(badge);
-        container.appendChild(summary);
-    } catch (error) {
-        console.error("Error fetching backend data:", error);
-    }
-})();
+    function updatePosition(scrollPosition) {
+        // Calculate new rotation and position
+        const baseRotation = 45;  // Base rotation angle
+        const translateY = -scrollPosition * scrollFactor;
+        
+        content.style.transform = `
+            rotateX(${baseRotation}deg)
+            translateY(${translateY}px)
+            translateZ(0)
+        `;
+    };
+  }
+  
+  function removeStarWarsOverlay() {
+    const overlay = document.getElementById('star-wars-overlay');
+    if (overlay) overlay.remove();
+  }
