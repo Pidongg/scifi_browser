@@ -1,5 +1,3 @@
-
-
 from mouse_controller import process_action
 
 

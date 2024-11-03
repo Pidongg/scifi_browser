@@ -6,40 +6,74 @@ from cvzone.HandTrackingModule import HandDetector
 from interpret_gestures import interpret_gesture
 
 
+# Gesture recognition
+BaseOptions = mp.tasks.BaseOptions
+GestureRecognizer = mp.tasks.vision.GestureRecognizer
+GestureRecognizerOptions = mp.tasks.vision.GestureRecognizerOptions
+GestureRecognizerResult = mp.tasks.vision.GestureRecognizerResult
+VisionRunningMode = mp.tasks.vision.RunningMode
+
+
+# Callback function to update the hand_data dictionary with the gestures
+def get_callback(hand_data: dict):
+
+    def callback(result, output_image: mp.Image, timestamp_ms: int):
+        hand_data["gestures"] = result.gestures
+        if result.gestures and len(result.gestures[0]) > 0:
+            hand_data["gesture"] = result.gestures[0][0].category_name
+        else:
+            hand_data["gesture"] = "None"
+
+    return callback
+
+
 def start_hand_tracking(hand_data: dict) -> None:
     """
     Start the hand tracking process.
     """
-    
 
+    # Options for the gesture recognizer
+    timestamp = 0
+    options = GestureRecognizerOptions(
+        base_options=BaseOptions(model_asset_path='gesture_recognizer.task'),
+        running_mode=VisionRunningMode.LIVE_STREAM,
+        result_callback=get_callback(hand_data)
+    )
+    
     # Initialize the webcam and hand detector
-    cap: cv2.VideoCapture = cv2.VideoCapture(0) # 0 for built-in camera
+    video: cv2.VideoCapture = cv2.VideoCapture(0) # 0 for built-in camera
     detector = HandDetector(staticMode=False, maxHands=2, modelComplexity=1, detectionCon=0.5, minTrackCon=0.5)
 
-    # Continuously get frames from the webcam
     try:
-        while True:
-            # Capture each frame from the webcam
-            success, img = cap.read() # img contains the frame
-            if not success:
-                print("Error capturing frame")
-                continue
+        with GestureRecognizer.create_from_options(options) as recognizer:
+            # Continuously get frames from the webcam
+            while video.isOpened(): 
+                # Capture frame-by-frame
+                success, frame = video.read()
 
-            img = process_frame(detector, img, hand_data)
-            cv2.imshow("Image", img)
-            if cv2.waitKey(10) & 0xFF == ord('q'): # wait for 5ms and if q is pressed, break
-                break
+                if not success:
+                    print("Ignoring empty frame")
+                    continue
+
+                timestamp += 1
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+                recognizer.recognize_async(mp_image, timestamp)
+                img = process_frame(detector, frame, hand_data, recognizer)
+                cv2.imshow('MediaPipe Hands', img) # TODO: Remove
+
+                if cv2.waitKey(10) & 0xFF == 27:
+                    break
     
     except Exception as e:
         print(f"Error: {e}")
     
     finally:
         print("Exiting gracefully")
-        cap.release()
+        video.release()
         cv2.destroyAllWindows()
 
 
-def process_frame(detector: HandDetector, img: cv2.Mat, hand_data: dict) -> cv2.Mat:
+def process_frame(detector: HandDetector, img: cv2.Mat, hand_data: dict, recognizer) -> cv2.Mat:
     """
     Process a frame from the webcam.
     """
