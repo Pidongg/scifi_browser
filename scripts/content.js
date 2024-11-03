@@ -2,6 +2,9 @@ let isEnabled = false;
 let restorableState = null;
 
 async function getMainContent() {
+    // Always use body as the main element
+    let mainElement = null;
+    let longestText = '';
     const selectors = [
         'article',
         '[role="main"]',
@@ -12,10 +15,6 @@ async function getMainContent() {
         '.entry-content',
         '#content'
     ];
-
-    let mainElement = null;
-    let longestText = '';
-
     for (const selector of selectors) {
         const element = document.querySelector(selector);
         if (element) {
@@ -27,86 +26,98 @@ async function getMainContent() {
         }
     }
 
-    if (!mainElement || longestText.split(' ').length < 100) {
-        console.log('No main content found');
-        return null;
+    if (!mainElement || longestText.split(' ').length < 100 ) {
+        console.log('No main element found, using body');
+        mainElement = document.body;
     }
+    let textNodes = [];
+    let fullText = '';
+    
 
-    const walker = document.createTreeWalker(
-        mainElement,
-        NodeFilter.SHOW_TEXT,
-        {
-            acceptNode: function(node) {
-                // Skip if parent or ancestor is any of these elements
-                const skipElements = [
-                    'BUTTON',   // Buttons
-                    'INPUT',    // Form inputs
-                    'SELECT',   // Dropdowns
-                    'TEXTAREA', // Text areas
-                    'SCRIPT',   // JavaScript
-                    'STYLE',    // CSS
-                    'NAV',      // Navigation
-                    'HEADER',   // Site header (not article headings)
-                    'FOOTER',   // Footers
-                    'PICTURE',  // Picture elements
-                    'IMG',      // Images
-                    'FIGURE',   // Figures
-                    'FIGCAPTION', // Figure captions
-                    'VIDEO',    // Videos
-                    'AUDIO',    // Audio
-                    'IFRAME'    // Embedded frames
-                ];
+    function traverseNode(node) {
+        // Skip if node is null or undefined
+        if (!node) return;
 
-                // Check if it's a heading or part of main content
+        // Skip unwanted elements
+        const skipElements = [
+            'SCRIPT', 'STYLE', 'NOSCRIPT', 
+            'IFRAME', 'SVG', 'PATH', 'BUTTON',
+            'INPUT', 'SELECT', 'TEXTAREA', 'CODE'
+        ];
+
+        if (skipElements.includes(node.tagName)) {
+            return;
+        }
+
+        // Special handling for aria-hidden spans
+        if (node.nodeType === Node.ELEMENT_NODE && 
+            node.tagName === 'SPAN' && 
+            node.getAttribute('aria-hidden') === 'true') {
+            
+            // Get all child nodes including comments
+            let text = '';
+            for (const child of node.childNodes) {
+                if (child.nodeType === Node.COMMENT_NODE || 
+                    child.nodeType === Node.TEXT_NODE) {
+                    text += child.textContent;
+                }
+            }
+            
+            text = text.trim();
+            if (text) {
+                textNodes.push({
+                    node: node,
+                    text: text,
+                    startIndex: fullText.length,
+                    isHeading: false
+                });
+                fullText += text + '\n---SPLIT---\n';
+            }
+            return; // Skip processing children since we've handled the text directly
+        }
+
+        // Handle regular text nodes
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent.trim();
+            if (text) {
+                // Check if any parent is a heading
+                let isHeading = false;
                 let parent = node.parentElement;
                 while (parent) {
-                    // Skip if it's in our skip list
-                    if (skipElements.includes(parent.tagName)) {
-                        return NodeFilter.FILTER_REJECT;
+                    if (parent.tagName && parent.tagName.match(/^H[1-6]$/)) {
+                        isHeading = true;
+                        break;
                     }
-                    
-                    // Keep headings and main content
-                    if (parent.tagName.match(/^H[1-6]$/)) {
-                        return NodeFilter.FILTER_ACCEPT;
-                    }
-                    
                     parent = parent.parentElement;
                 }
 
-                // Skip empty or very short non-heading text
-                const trimmedText = node.textContent.trim();
-                if (!trimmedText || (trimmedText.length < 1 && !node.parentElement.tagName.match(/^H[1-6]$/))) {
-                    return NodeFilter.FILTER_REJECT;
-                }
+                textNodes.push({
+                    node: node,
+                    text: text,
+                    startIndex: fullText.length,
+                    isHeading: isHeading
+                });
+                fullText += text + '\n---SPLIT---\n';
+            }
+            return; // Add return here to prevent further processing
+        }
 
-                return NodeFilter.FILTER_ACCEPT;
+        // Only process child nodes if we haven't already handled the node
+        if (node.childNodes) {
+            for (const child of node.childNodes) {
+                traverseNode(child);
             }
         }
-    );
+    }
 
-    let textNodes = [];
-    let fullText = '';
-    let node;
+    // Start the traversal from the main element
+    traverseNode(mainElement);
+    console.log(fullText);
     
-    while (node = walker.nextNode()) {
-        const text = node.textContent;
-        if (text.length > 0) {
-            textNodes.push({
-                node: node,
-                text: text,
-                startIndex: fullText.length,
-                isHeading: node.parentElement.tagName.match(/^H[1-6]$/) !== null
-            });
-            fullText += text + '\n---SPLIT---\n';
-        }
-    }
-
-    if (textNodes.length === 0 || fullText.split(' ').length < 100) {
-        console.log('Not enough main content found');
-        return null;
-    }
-
-    return { textNodes, fullText, element: mainElement };
+    return {
+        textNodes: textNodes,
+        fullText: fullText
+    };
 }
 
 async function callOpenAI(text) {
@@ -120,7 +131,7 @@ async function callOpenAI(text) {
                 'Authorization': `Bearer ${config.OPENAI_API_KEY}`
             },
             body: JSON.stringify({
-                model: "gpt-4o",
+                model: "gpt-4o-mini",
                 messages: [
                     {
                         "role": "system",
@@ -128,8 +139,8 @@ async function callOpenAI(text) {
 
 # Instructions
 1. **Add Star Wars Elements:** Reasonably modify relevant sections and humorously introduce Star Wars elements such as memorable phrases and references to popular elements like planets, starships, or references to characters.
-2. **Keep Original Purpose, Segment Length, and Names:** PRESERVE the original purpose, LENGTH of each segment. Keep person names, and please do NOT insert new segments nor split existing segments. DO NOT CHANGE THE SEGMENT IF LENGTH IS LESS THAN 5. 
-3. **Maintain Spacing:** MAINTAIN the same original whitespaces & punctuation at the start or end of each segment. NO ADDITION OF WHITESPACES IN EACH SEGMENT.
+2. **Keep Original Purpose, Segment Length, and Names:** PRESERVE the original purpose and LENGTH of each segment. Keep person names, and please do NOT insert new segments nor split existing segments. SKIP THE SEGMENT IF NUMBER OF WORDS IN THE SEGMENT IS LESS THAN 5. 
+3. **Maintain Spacing:** MAINTAIN the same original whitespaces & punctuation at the start or end of each segment. NO ADDITION OF NEWLINE.
 
 # Output Format
 Return the transformed text with the same partitioning structure using '---SPLIT---'. Maintain one-to-one mapping between input segment and output segment. NO extra commentary/markdown, just the text.`
@@ -160,6 +171,7 @@ Return the transformed text with the same partitioning structure using '---SPLIT
 async function splitContentIntoChunks(textNodes, maxChunkSize = 5) {
     let chunks = [];
     let currentChunk = [];
+    let processedNodes = new Set();
     
     const isEndOfSentence = (text) => {
         const trimmed = text.trim();
@@ -170,7 +182,6 @@ async function splitContentIntoChunks(textNodes, maxChunkSize = 5) {
     };
 
     const shouldStartNewChunk = (currentNode, nextNode) => {
-        // Always start new chunk on heading
         if (nextNode && nextNode.isHeading) return true;
         
         // Start new chunk if we're at max size AND at end of sentence
@@ -257,7 +268,6 @@ function getImages() {
         '.logo',
         '.avatar',
         '.icon',
-        'button img'
     ];
 
     // Get all images except those matching skip selectors
@@ -546,20 +556,33 @@ function changeMousePosition() {
         .catch(error => console.error('Error:', error));
 }
 
+// Add URL change detection and content processing
+let lastUrl = window.location.href;
+
+// Create observer to watch for URL changes
+const urlObserver = new MutationObserver(async (mutations) => {
+    if (window.location.href !== lastUrl) {
+        console.log('URL changed from', lastUrl, 'to', window.location.href);
+        lastUrl = window.location.href;
+        
+        // Wait a bit for the new content to load
+        setTimeout(async () => {
+            const content = await getMainContent();
+            if (content) {
+                processContentInParallel(content);
+            }
+        }, 1000); // Adjust timeout as needed
+    }
+});
+
 // Modify the main execution
 (async () => {
     try {
-        // const loader = showLoading();
-        // Poll every 100ms (adjust this value as needed)
-        // setInterval(changeMousePosition, 100);
-        // Process text content
+        // Initial content processing
         const content = await getMainContent();
-        console.log(content.fullText);
         if (content) {
             processContentInParallel(content);
         }
-        
-
         const find_and_process_all_images = async () => {
             const images = getImages();
             if (images.length > 0) {
@@ -572,10 +595,14 @@ function changeMousePosition() {
 
         document.onscrollend = () => find_and_process_all_images();
         
-        // loader.remove();
+        // Start observing URL changes
+        urlObserver.observe(document, {
+            subtree: true,
+            childList: true
+        });
+        
     } catch (error) {
         console.error('Error:', error);
-        document.getElementById('funny-loader')?.remove();
     }
 })();
 
