@@ -143,7 +143,7 @@ async function callOpenAI(text) {
 
 # Instructions
 1. **Add Star Wars Elements:** Reasonably modify relevant sections and humorously introduce Star Wars elements such as memorable phrases and references to popular elements like planets, starships, or references to characters.
-2. **Keep Original Purpose, Segment Length, and Names:** PRESERVE the original purpose and LENGTH of each segment. Keep person names, and please do NOT insert new segments nor split existing segments. SKIP THE SEGMENT IF NUMBER OF WORDS IN THE SEGMENT IS LESS THAN 5. 
+2. **Keep Original Purpose, Segment Length, and Names:** PRESERVE LENGTH OF EACH SEGMENT. Keep person names, and please do NOT insert new segments nor split existing segments. SKIP THE SEGMENT IF NUMBER OF WORDS IN THE SEGMENT IS LESS THAN 5. 
 3. **Maintain Spacing:** MAINTAIN the same original whitespaces & punctuation at the start or end of each segment. NO ADDITION OF NEWLINE.
 
 # Output Format
