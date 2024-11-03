@@ -249,7 +249,7 @@ async function processContentInParallel(content) {
     }
 }
 
-async function getImages() {
+function getImages() {
     const skipSelectors = [
         'nav img', 
         'header img', 
@@ -353,13 +353,15 @@ async function imageToBase64(img) {
     });
 }
 
-async function transformImage(img) {
+async function transformImage(img, test = false) {
     try {
         // Skip if image is already processed or invalid
         if (img.processed || !img.complete || !img.naturalWidth || !img.src) {
             return;
         }
         img.processed = true;
+        img.style.border = "5px solid green";
+        if (test) return;
 
         // Store original dimensions
         const originalWidth = img.width;
@@ -430,7 +432,7 @@ async function transformImage(img) {
             
             // Force the new src and prevent srcset from being used
             img.src = `data:image/png;base64,${newImageBase64}`;
-            img.dataset.processed = 'true';
+            img.processed = 'true';
             
             // Force a reload to ensure the new image is displayed
             const parent = img.parentNode;
@@ -479,7 +481,7 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
 });
 
 // Add rate limiting and retries
-async function processImagesInParallel(images) {
+async function processImagesInParallel(images, test = false) {
     // Sort images by their vertical position (top to bottom)
     const sortedImages = Array.from(images).sort((a, b) => {
         const aRect = a.getBoundingClientRect();
@@ -492,7 +494,7 @@ async function processImagesInParallel(images) {
     
     const processWithRetry = async (img, retryCount = 0) => {
         try {
-            await transformImage(img);
+            await transformImage(img, test);
         } catch (error) {
             if (retryCount < maxRetries) {
                 console.log(`Retrying image ${retryCount + 1}/${maxRetries}`);
@@ -559,20 +561,16 @@ function changeMousePosition() {
         
 
         const find_and_process_all_images = async () => {
-            const images = await getImages();
-            console.log(images.length)
+            const images = getImages();
             if (images.length > 0) {
                 // updateLoader('Starting image transformation...');
-                processImagesInParallel(images);
+                processImagesInParallel(images, true);
             }
         }
         
         find_and_process_all_images();
-        let interval = setInterval(async () => {
-            find_and_process_all_images()
-        }, 5000);
 
-        setTimeout(() => {clearInterval(interval)}, 60000);
+        document.onscrollend = () => find_and_process_all_images();
         
         // loader.remove();
     } catch (error) {
