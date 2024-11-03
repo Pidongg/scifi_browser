@@ -26,9 +26,9 @@ def scroll(vertical, horizontal):
     pyautogui.sleep(0.01)  # Controls the smoothness of scrolling
 
 def zoom(out=False):
-    pyautogui.keyDown('ctrl')
+    pyautogui.keyDown('command')
     if out:
-        pyautogui.keyDown('-')
+        pyautogui.press('-')
     else:
         pyautogui.keyDown('+')
     pyautogui.sleep(0.01)
@@ -36,5 +36,5 @@ def zoom(out=False):
         pyautogui.keyUp('-')
     else:
         pyautogui.keyUp('+')
-    pyautogui.keyUp('ctrl')
+    pyautogui.keyUp('command')
 

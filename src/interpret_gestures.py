@@ -74,14 +74,15 @@ def interpret_gesture(hand_data: dict) -> None:
             action = "scroll up"
         elif hand_data.get("y_velocity") < -Y_VELOCITY_THRESHOLD and thumb_direction == "inwards":
             action = "scroll down"
-    elif abs(hand_data.get("x_diff_velocity")) > X_DIFF_VELOCITY_THRESHOLD:
+    
+    elif (
+        abs(hand_data.get("x_diff_velocity")) > X_DIFF_VELOCITY_THRESHOLD and
+        hand_data.get("gesture") == "Open_Palm"
+    ):
         if hand_data.get("x_diff_velocity") > X_DIFF_VELOCITY_THRESHOLD:
             action = "zoom in"
         elif hand_data.get("x_diff_velocity") < -X_DIFF_VELOCITY_THRESHOLD:
             action = "zoom out"
-        else:
-            action = "idle"
-    else:
-        action = "idle"
+    
     print(action)
     process_action(action)
