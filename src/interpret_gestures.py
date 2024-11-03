@@ -1,3 +1,4 @@
+import math
 from mouse_controller import process_action
 
 
@@ -6,6 +7,9 @@ Y_VELOCITY_THRESHOLD = 20
 MIDDLE_FINGER_SLOPE_THRESHOLD = 0.5
 GESTURES = ["None", "Thumb_Down", "Thumb_Up", "Closed_Fist", "Pointing_Up", "Pointing_Down", "Victory"]
 X_DIFF_VELOCITY_THRESHOLD = 20
+MOUSE_MOVE_VELOCITY_THRESHOLD = 10
+
+previous_action = "idle"
 
 
 def get_proportional_hand_distance(hand_data: dict) -> float:
@@ -60,7 +64,11 @@ def direction_of_thumbs(hand_data: dict) -> str:
 
 
 def interpret_gesture(hand_data: dict) -> None:
+    global previous_action
     action = "idle"
+
+    right = get_right_hand(hand_data)
+    hand_velocity = math.sqrt(right["x_velocity"] ** 2 + right["y_velocity"] ** 2) if right else 0
 
     if (
         1.5 < get_proportional_hand_distance(hand_data) < 4.0 and
@@ -74,15 +82,35 @@ def interpret_gesture(hand_data: dict) -> None:
             action = "scroll up"
         elif hand_data.get("y_velocity") < -Y_VELOCITY_THRESHOLD and thumb_direction == "inwards":
             action = "scroll down"
+
+    # elif (
+    #     hand_data.get("gesture") == "Closed_Fist" and
+    #     hand_velocity > MOUSE_MOVE_VELOCITY_THRESHOLD
+    # ):
+    #     action = "mouse move"
+
+    # elif (
+    #     hand_data.get("gesture") == "Pointing_Up"
+    # ):
+    #     action = "mouse down"
+
+    # elif previous_action == "mouse down":
+    #     action = "mouse up"
+
     
-    elif (
-        abs(hand_data.get("x_diff_velocity")) > X_DIFF_VELOCITY_THRESHOLD and
-        hand_data.get("gesture") == "Open_Palm"
-    ):
-        if hand_data.get("x_diff_velocity") > X_DIFF_VELOCITY_THRESHOLD:
-            action = "zoom in"
-        elif hand_data.get("x_diff_velocity") < -X_DIFF_VELOCITY_THRESHOLD:
-            action = "zoom out"
+    # elif (
+    #     abs(hand_data.get("x_diff_velocity")) > X_DIFF_VELOCITY_THRESHOLD and
+    #     hand_data.get("gesture") == "Open_Palm"
+    # ):
+    #     if hand_data.get("x_diff_velocity") > X_DIFF_VELOCITY_THRESHOLD:
+    #         action = "zoom in"
+    #     elif hand_data.get("x_diff_velocity") < -X_DIFF_VELOCITY_THRESHOLD:
+    #         action = "zoom out"
     
-    print(action)
-    process_action(action)
+    # print(action)
+
+    mouse_x = right["x_velocity"] / 10 if right else 0
+    mouse_y = right["y_velocity"] / 10 if right else 0
+
+    process_action((action, mouse_x, mouse_y))
+    previous_action = action

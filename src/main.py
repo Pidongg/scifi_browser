@@ -16,13 +16,17 @@ def main():
             "type": "",
             "fingers": 0,
             "center": (0, 0),
-            "bbox": [0, 0, 0, 0]
+            "bbox": [0, 0, 0, 0],
+            "x_velocity": 0,
+            "y_velocity": 0
         },
         "hand2": {
             "type": "",
             "fingers": 0,
             "center": (0, 0),
-            "bbox": [0, 0, 0, 0]
+            "bbox": [0, 0, 0, 0],
+            "x_velocity": 0,
+            "y_velocity": 0
         }
     }
     print("starting")

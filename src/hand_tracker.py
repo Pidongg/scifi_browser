@@ -88,6 +88,7 @@ def process_hands(hands: list[dict], detector: HandDetector, img: cv2.Mat, hand_
 
     hand_data["num_hands"] = len(hands)
     centers = []
+    cur_time = time.time()
 
     for i, hand in enumerate(hands):
         name = f"hand{i+1}"
@@ -97,19 +98,27 @@ def process_hands(hands: list[dict], detector: HandDetector, img: cv2.Mat, hand_
         handType = hand["type"]  # Type of the hand ("Left" or "Right")
         fingers = detector.fingersUp(hand)
 
+        try:        
+            x_velocity = (center[0] - hand_data[name]["center"][0]) / (cur_time - hand_data["last_update"])
+            y_velocity = (center[1] - hand_data[name]["center"][1]) / (cur_time - hand_data["last_update"])
+        except:
+            x_velocity = 0
+            y_velocity = 0
+
         hand_data[name] = {
             'type': handType,
             'fingers': fingers,
             'center': center,
             'bbox': bbox,
             'lmList': lmList,
+            "x_velocity": x_velocity,
+            "y_velocity": y_velocity
         }
 
         centers.append(center[:2])
 
     # Center of both hands
     if centers:
-        cur_time = time.time()
         x_center = sum(center[0] for center in centers) / len(centers)
         y_center = sum(center[1] for center in centers) / len(centers)
         if len(centers) > 1:

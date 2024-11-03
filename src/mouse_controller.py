@@ -9,16 +9,18 @@ ZOOM_STEPS = 20  # Number of small increments for smooth zooming
 ZOOM_DELAY = 0.02  # Delay between each zoom step for smooth effect
 
 
-def process_action(action: str) -> None:
+def process_action(action: tuple) -> None:
     # print(action)
-    if action == "scroll up":
+    if action[0] == "scroll up":
         threading.Thread(target=scroll, args=(-SCROLL_SPEED, 0)).start()
-    elif action == "scroll down":
-        threading.Thread(target=scroll, args=(SCROLL_SPEED, 0)).start()
-    elif action == "zoom in":
-        threading.Thread(target=smooth_zoom, args=("in",)).start()
-    elif action == "zoom out":
-        threading.Thread(target=smooth_zoom, args=("out",)).start()
+    elif action[0] == "mouse down":
+        threading.Thread(target=mouse_down).start()
+    elif action[0] == "mouse up":
+        threading.Thread(target=mouse_up).start()
+    elif action[0] == "mouse move":
+        mouse_x = action[1]
+        mouse_y = action[2]
+        threading.Thread(target=move_mouse, args=(mouse_x, mouse_y)).start()
 
 
 def scroll(vertical, horizontal):
@@ -43,3 +45,13 @@ def smooth_zoom(direction):
         time.sleep(ZOOM_DELAY)  # Delay to make the zooming smooth
 
 
+def move_mouse(x, y):
+    pyautogui.moveRel(x, y)
+
+
+def mouse_down():
+    pyautogui.mouseDown(button='left')
+
+
+def mouse_up():
+    pyautogui.mouseUp(button='left')
