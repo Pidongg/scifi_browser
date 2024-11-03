@@ -718,7 +718,7 @@ async function createStarWarsOverlay() {
     const shadowOverlay = document.querySelector('#shadow-overlay');
     const shadowContent = shadowOverlay.shadowRoot;
     const content = shadowContent.querySelector('#target > div');
-    const scrollMultiplier = 2; // Adjust this value to change scroll speed
+    const scrollMultiplier = 1; // Adjust this value to change scroll speed
 
     window.addEventListener('scroll', function() {
         const scrollPosition = window.scrollY || document.documentElement.scrollTop;

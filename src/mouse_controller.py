@@ -10,13 +10,15 @@ ZOOM_DELAY = 0.02  # Delay between each zoom step for smooth effect
 
 
 def process_action(action: tuple) -> None:
-    # print(action)
+    print(action[0])
     if action[0] == "scroll up":
         threading.Thread(target=scroll, args=(-SCROLL_SPEED, 0)).start()
-    elif action[0] == "mouse down":
-        threading.Thread(target=mouse_down).start()
-    elif action[0] == "mouse up":
-        threading.Thread(target=mouse_up).start()
+    elif action[0] == "scroll down":
+        threading.Thread(target=scroll, args=(SCROLL_SPEED, 0)).start()
+    # elif action[0] == "mouse down":
+    #     threading.Thread(target=mouse_down).start()
+    # elif action[0] == "mouse up":
+    #     threading.Thread(target=mouse_up).start()
     elif action[0] == "mouse move":
         mouse_x = action[1]
         mouse_y = action[2]
