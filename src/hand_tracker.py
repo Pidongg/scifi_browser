@@ -1,7 +1,6 @@
 import time
 import cv2
 import mediapipe as mp
-import numpy as np
 from cvzone.HandTrackingModule import HandDetector
 from interpret_gestures import interpret_gesture
 
@@ -61,7 +60,7 @@ def start_hand_tracking(hand_data: dict) -> None:
                 img = process_frame(detector, frame, hand_data, recognizer)
                 cv2.imshow('MediaPipe Hands', img) # TODO: Remove
 
-                if cv2.waitKey(10) & 0xFF == 27:
+                if cv2.waitKey(5) & 0xFF == 27:
                     break
     
     except Exception as e:

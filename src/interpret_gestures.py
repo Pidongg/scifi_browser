@@ -2,8 +2,9 @@ from mouse_controller import process_action
 
 
 # Constants
-Y_VELOCITY_THRESHOLD = 80
-MIDDLE_FINGER_SLOPE_THRESHOLD = 0.15
+Y_VELOCITY_THRESHOLD = 20
+MIDDLE_FINGER_SLOPE_THRESHOLD = 0.5
+GESTURES = ["None", "Thumb_Down", "Thumb_Up", "Closed_Fist", "Pointing_Up", "Pointing_Down", "Victory"]
 
 
 def get_proportional_hand_distance(hand_data: dict) -> float:
@@ -35,24 +36,45 @@ def get_right_hand(hand_data: dict) -> dict:
                 return item
     return None
 
-# def get_gesture_type(hand_data: dict) -> str:
+
+def direction_of_thumbs(hand_data: dict) -> str:
+    left = get_left_hand(hand_data)
+    right = get_right_hand(hand_data)
+
+    if left and right:
+        x1_thumb, y1_thumb = left["lmList"][4][:2]
+        x1_outer, y1_outer = left["lmList"][17][:2]
+        x2_thumb, y2_thumb = right["lmList"][4][:2]
+        x2_outer, y2_outer = right["lmList"][17][:2]
+
+        threshold = 30
+
+        if x1_thumb - threshold > x1_outer and x2_thumb + threshold < x2_outer:
+            return "outwards"
+        elif x1_thumb + threshold < x1_outer and x2_thumb - threshold > x2_outer:
+            return "inwards"
+    return "none"
+
+
 
 
 def interpret_gesture(hand_data: dict) -> None:
-    action = ""
+    action = "idle"
 
     if (
         1.5 < get_proportional_hand_distance(hand_data) < 4.0 and
         hand_data.get("num_hands") >= 2 and
         hand_data.get("middle_finger_slope") < MIDDLE_FINGER_SLOPE_THRESHOLD and 
-        abs(hand_data.get("y_velocity")) > Y_VELOCITY_THRESHOLD
+        abs(hand_data.get("y_velocity")) > Y_VELOCITY_THRESHOLD and
+        hand_data.get("gesture") in ["Open_Palm", "None"]
     ):
-        if hand_data.get("y_velocity") > Y_VELOCITY_THRESHOLD:
+        thumb_direction = direction_of_thumbs(hand_data)
+        if hand_data.get("y_velocity") > Y_VELOCITY_THRESHOLD and thumb_direction == "outwards":
             action = "scroll up"
-        else:
+        elif hand_data.get("y_velocity") < -Y_VELOCITY_THRESHOLD and thumb_direction == "inwards":
             action = "scroll down"
-    
-    else:
-        action = "idle"
+
+
+    print(action)
 
     process_action(action)

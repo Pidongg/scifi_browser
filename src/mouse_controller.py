@@ -3,7 +3,7 @@ from pynput import keyboard
 import threading
 
 # Speed of scrolling
-SCROLL_SPEED = 2
+SCROLL_SPEED = 4
 
 def process_action(action: str) -> None:
     # print(action)
