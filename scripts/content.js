@@ -318,6 +318,7 @@ async function imageToBase64(img) {
             // Create a new image to handle CORS
             const corsImage = new Image();
             corsImage.crossOrigin = "anonymous";
+
             corsImage.onload = () => {
                 try {
                     // Resize image to allowed dimensions
@@ -328,8 +329,20 @@ async function imageToBase64(img) {
                     reject(err);
                 }
             };
+
+            corsImage.onerror = () => {
+                reject(new Error('Failed to load image'));
+            };
+
+            // Add a proxy if the image fails to load with CORS
+            const tryWithProxy = () => {
+                corsImage.src = `https://cors-anywhere.herokuapp.com/${img.src}`;
+            };
+
             corsImage.src = img.src;
             corsImage.processed = true;
+            corsImage.addEventListener('error', tryWithProxy);
+
         } catch (error) {
             reject(error);
         }
@@ -375,7 +388,7 @@ async function transformImage(img) {
         formData.append('text_prompts[0][text]', 'Convert to (Star Wars) style, same composition but add Star Wars elements like droids, spaceships, or alien species in background. Make it look like it was taken on Tatooine or a Star Wars planet. Add Star Wars alien features to people.');
         formData.append('text_prompts[0][weight]', '1.5');
         formData.append('text_prompts[1][text]', 'bad quality, blurry, distorted');
-        formData.append('text_prompts[1][weight]', '-1');
+        formData.append('text_prompts[1][weight]', '-1.5');
         if (img.alt) {
             formData.append('text_prompts[2][text]', img.alt)
             formData.append('text_prompts[2][weight]', '0.5');
@@ -443,70 +456,32 @@ async function transformImage(img) {
 
 // Add rate limiting and retries
 async function processImagesInParallel(images) {
-    images.forEach((image) => {image.in_queue = true;});
-
-    const batchSize = 4;  // Smaller batch size
-    const delay = 2000;   // Longer delay between batches
-    const maxRetries = 3; // Number of retries for failed requests
+    // Sort images by their vertical position (top to bottom)
+    const sortedImages = Array.from(images).sort((a, b) => {
+        const aRect = a.getBoundingClientRect();
+        const bRect = b.getBoundingClientRect();
+        return aRect.top - bRect.top;
+    });
     
-    for (let i = 0; i < images.length; i += batchSize) {
-        const batch = images.slice(i, i + batchSize);
-        
-        // Show progress
-        const progress = Math.round((i / images.length) * 100);
-        updateLoader(`Transforming images: ${progress}%`);
-        
-        // Process batch with retries
-        const processWithRetry = async (img, retryCount = 0) => {
-            try {
-                await transformImage(img);
-            } catch (error) {
-                if (retryCount < maxRetries) {
-                    console.log(`Retrying image ${retryCount + 1}/${maxRetries}`);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    return processWithRetry(img, retryCount + 1);
-                }
-                throw error;
-            }
-        };
-        
-        // Process batch in parallel
-        await Promise.all(batch.map(img => processWithRetry(img)));
-        
-        // Wait before processing next batch
-        if (i + batchSize < images.length) {
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-}
-
-async function process_images(images) {
-    const delay = 500;
-
+    sortedImages.forEach((image) => {image.in_queue = true;});
+    const maxRetries = 3;
+    
     const processWithRetry = async (img, retryCount = 0) => {
         try {
             await transformImage(img);
         } catch (error) {
             if (retryCount < maxRetries) {
                 console.log(`Retrying image ${retryCount + 1}/${maxRetries}`);
-                await new Promise(resolve => setTimeout(resolve, 1000));
                 return processWithRetry(img, retryCount + 1);
             }
             throw error;
         }
     };
-
-    const total = images.length;
-    count = 0
-
-    while (images.length > 0) {
-        let image = images.shift()
-        await transformImage(image);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        count += 1;
-        const progress = Math.round((count / total) * 100);
-        updateLoader(`Transforming images: ${progress}%`);
-    }
+    
+    // Process all images in parallel, but they'll be queued in order of vertical position
+    await Promise.all(sortedImages.map(img => processWithRetry(img)));
+    
+    updateLoader(`Transformation complete!`);
 }
 
 function updateLoader(text) {
