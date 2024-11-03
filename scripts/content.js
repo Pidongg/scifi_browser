@@ -6,7 +6,8 @@ async function getMainContent() {
         '.post-content',
         '.article-content',
         '#article-content',
-        '.entry-content'
+        '.entry-content',
+        '#content'
     ];
 
     let mainElement = null;
@@ -116,19 +117,19 @@ async function callOpenAI(text) {
                 'Authorization': `Bearer ${config.OPENAI_API_KEY}`
             },
             body: JSON.stringify({
-                model: "gpt-4o-mini",
+                model: "gpt-4o",
                 messages: [
                     {
                         "role": "system",
                         "content": `Craft the provided content into a humorous, Star Wars-themed science fiction version, but don't distort the original content/people names. 
 
 # Instructions
-1. **Add Star Wars Elements:** Modify relevant sections and humorously introduce Star Wars elements such as memorable phrases and references to popular elements like planets, starships, or references to characters. 
-2. **Add Humor, Keep Original Structure, and Names:** Insert light-hearted Star Wars-inspired jokes while maintaining the overall intent. Keep person names, and keep the original segment structure intact.
-3. **Maintain Spacing:** KEEP the original spaces at the start and end of each segment.
+1. **Add Star Wars Elements:** Reasonably modify relevant sections and humorously introduce Star Wars elements such as memorable phrases and references to popular elements like planets, starships, or references to characters.
+2. **Keep Original Purpose, Segment Length, and Names:** PRESERVE the original purpose, LENGTH of each segment. Keep person names, and please do NOT insert new segments nor split existing segments. DO NOT CHANGE THE SEGMENT IF LENGTH IS LESS THAN 5. 
+3. **Maintain Spacing:** MAINTAIN the same original whitespaces & punctuation at the start or end of each segment. NO ADDITION OF WHITESPACES IN EACH SEGMENT.
 
 # Output Format
-Return the transformed text with the same partitioning structure using '---SPLIT---'. Please do NOT insert new segments, or split existing segments. NO extra commentary, just the text.`
+Return the transformed text with the same partitioning structure using '---SPLIT---'. Maintain one-to-one mapping between input segment and output segment. NO extra commentary/markdown, just the text.`
                     },
                     {
                         "role": "user",
@@ -235,7 +236,7 @@ async function processAndUpdateChunk(chunk) {
 async function processContentInParallel(content) {
     // Split content into manageable chunks
     const chunks = await splitContentIntoChunks(content.textNodes);
-    
+
     // Process chunks in parallel with a concurrency limit
     const concurrencyLimit = 3; // Process 3 chunks at a time
     
@@ -528,6 +529,7 @@ function changeMousePosition() {
         // setInterval(changeMousePosition, 100);
         // Process text content
         const content = await getMainContent();
+        console.log(content.fullText);
         if (content) {
             processContentInParallel(content);
         }
