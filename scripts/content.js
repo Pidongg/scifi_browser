@@ -260,7 +260,7 @@ async function getImages() {
     const images = Array.from(document.querySelectorAll('img'))
         .filter(img => {
             // Skip tiny images (likely icons)
-            if (img.width < 100 || img.height < 100) return false;
+            if (img.naturalWidth < 100 || img.naturalHeight < 100) return false;
             // Skip already processed images
             if (img.processed || img.in_queue) return false;
             // Skip images matching selectors
@@ -270,7 +270,7 @@ async function getImages() {
     return images;
 }
 
-function resizeImage(img, targetWidth = 1024, targetHeight = 1024) {
+function resizeImage(img) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
@@ -318,7 +318,6 @@ async function imageToBase64(img) {
             // Create a new image to handle CORS
             const corsImage = new Image();
             corsImage.crossOrigin = "anonymous";
-
             corsImage.onload = () => {
                 try {
                     // Resize image to allowed dimensions
@@ -329,20 +328,8 @@ async function imageToBase64(img) {
                     reject(err);
                 }
             };
-
-            corsImage.onerror = () => {
-                reject(new Error('Failed to load image'));
-            };
-
-            // Add a proxy if the image fails to load with CORS
-            const tryWithProxy = () => {
-                corsImage.src = `https://cors-anywhere.herokuapp.com/${img.src}`;
-            };
-
             corsImage.src = img.src;
             corsImage.processed = true;
-            corsImage.addEventListener('error', tryWithProxy);
-
         } catch (error) {
             reject(error);
         }
@@ -561,14 +548,14 @@ function changeMousePosition() {
 // Modify the main execution
 (async () => {
     try {
-        const loader = showLoading();
+        // const loader = showLoading();
         // Poll every 100ms (adjust this value as needed)
         // setInterval(changeMousePosition, 100);
         // Process text content
-        // const content = await getMainContent();
-        // if (content) {
-        //     await processContentInParallel(content);
-        // }
+        const content = await getMainContent();
+        if (content) {
+            processContentInParallel(content);
+        }
         
 
         const find_and_process_all_images = async () => {
@@ -576,17 +563,18 @@ function changeMousePosition() {
             console.log(images.length)
             if (images.length > 0) {
                 // updateLoader('Starting image transformation...');
-                await processImagesInParallel(images);
+                processImagesInParallel(images);
             }
         }
         
+        find_and_process_all_images();
         let interval = setInterval(async () => {
             find_and_process_all_images()
         }, 5000);
 
         setTimeout(() => {clearInterval(interval)}, 60000);
         
-        loader.remove();
+        // loader.remove();
     } catch (error) {
         console.error('Error:', error);
         document.getElementById('funny-loader')?.remove();
