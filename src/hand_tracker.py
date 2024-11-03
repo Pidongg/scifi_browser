@@ -109,18 +109,25 @@ def process_hands(hands: list[dict], detector: HandDetector, img: cv2.Mat, hand_
 
     # Center of both hands
     if centers:
+        cur_time = time.time()
         x_center = sum(center[0] for center in centers) / len(centers)
         y_center = sum(center[1] for center in centers) / len(centers)
+        if len(centers) > 1:
+            x_diff = abs(centers[0][0] - centers[1][0]) / 2
+            hand_data["x_diff_velocity"] = (x_diff - hand_data["x_diff"]) / (cur_time - hand_data["last_update"])
+            hand_data["x_diff"] = x_diff
 
         # Y velocity of the center of both hands
-        cur_time = time.time()
         hand_data["x_velocity"] = (x_center - hand_data["center"][0]) / (cur_time - hand_data["last_update"])
         hand_data["y_velocity"] = - (y_center - hand_data["center"][1]) / (cur_time - hand_data["last_update"])
+
+
         hand_data["last_update"] = cur_time
         hand_data["center"] = [x_center, y_center]
     else:
         hand_data["x_velocity"] = 0
         hand_data["y_velocity"] = 0
+        hand_data["x_diff_velocity"] = 0
     
     if len(hands) >= 2:
         check_horizontal_alignment(detector, img, hand_data)
